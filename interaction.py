@@ -6,19 +6,19 @@ from mysqlx import errorcode
 
 
 class interaction:
-
     mariadb_connection = mariadb.connect(user='root', password='azerty', database='OPENBACKUP', host="10.2.2.105")
     cursor = mariadb_connection.cursor(buffered=True)
-    # allowed_type = ["switch", "router", "firewall"]
-    #SQL QUERY
-    try:
-        get_device_type_list = "SELECT type FROM device_type"
-        cursor.execute(get_device_type_list)
-        mariadb_connection.commit()
-    except mysql.connector.Error as err:
-        if err.errno == errorcode.ER_NO_SUCH_TABLE:
-            print("Table device_type not found")
-    allowed_type = list(cursor.fetchall())
+    allowed_type = ["switch", "router", "firewall"]
+
+    # # SQL QUERY
+    # try:
+    #     get_device_type_list = "SELECT type FROM device_type"
+    #     cursor.execute(get_device_type_list)
+    #     mariadb_connection.commit()
+    # except mysql.connector.Error as err:
+    #     if err.errno == errorcode.ER_NO_SUCH_TABLE:
+    #         print("Table device_type not found")
+    # allowed_type = list(cursor.fetchall())
 
     # [1] Add Device
 
@@ -73,7 +73,7 @@ class interaction:
 
     # [4] List All Devices
 
-    def list_all_devices(self,type):
+    def list(self, type):
         if type == "all":
             get_devices = "SELECT device_name,ip_address FROM device_list"
         else:
@@ -87,6 +87,7 @@ class interaction:
 
         for device in device_list:
             print(device)
+        print("\n")
 
     # [5] Add device with a csv file
     # The csv layout need to be : ip,name,type,location
@@ -104,18 +105,19 @@ class interaction:
             with open("IMPORT/import_device.csv") as host_list:
                 readfile = csv.reader(host_list, delimiter=',')
                 device_list = list(readfile)
+                # catch exception indexerror if the csv is not correctly formatted
                 try:
                     for i in range(len(device_list)):
-                        # for j in range (len(device_list[i])):
-                        #     print(device_list[i][j])
+                        # Assign values from the list
                         ip_address = device_list[i][0]
                         device_name = device_list[i][1]
                         device_type = device_list[i][2]
                         device_location = device_list[i][3]
+                        # Check if the values are set and if device_type is allowed
                         if ip_address and device_name and device_type in self.allowed_type:
-
                             # SQL QUERY
                             try:
+                                # Insert the value in the DB
                                 add_device = "INSERT INTO device_list (ip_address,device_name, device_type, device_location) VALUES ('{}','{}','{}','{}')".format(
                                     ip_address, device_name, device_type, device_location)
                                 self.cursor.execute(add_device)
@@ -123,17 +125,74 @@ class interaction:
                                 print("Device successfully added to the Database")
                             except mysql.connector.Error as err:
                                 if err.errno == errorcode.ER_DUP_ENTRY:
+                                    # If the device is already declared in the table, inform the user
                                     print("This device already exist in the database")
                         else:
+                            # inform user on error(s) in the csv file
                             print("Error on line : " + str(i) + " - bad device type or missing parameter(s)")
                 except IndexError:
+                    # inform user on bad formatting of the csv file
                     print("Bad CSV formating on line : " + str(i))
 
         elif launch == "n" or launch == "no":
-            print("Launch nok")
+            print("Imported aborted by the user")
 
         else:
             print("Please enter y or n")
+
+    def call_back_conf(self):
+        # Calling back a configuration file and print it to the screen or save it to a file named "device_name-date.txt"
+        # in the folder DOWNLOADED_CONFIGURATION Reformating the conf file (single quote issue)
+        # SQL QUERY
+        device_name = input("Please enter the device's name : ")
+        parsed_config_raw = ""
+        parsed_config = ""
+        date_data = ""
+        date = ""
+        try:
+
+            # get the config data
+            get_config = "SELECT config FROM {} WHERE backup_id=(SELECT MAX(backup_id) FROM {})".format(device_name,
+                                                                                                        device_name)
+            self.cursor.execute(get_config)
+            parsed_config_raw = self.cursor.fetchall()
+            # Get the date of the backup to add it to the file name
+            get_date = "SELECT date FROM {} WHERE backup_id=(SELECT MAX(backup_id) FROM {})".format(device_name,
+                                                                                                    device_name)
+            self.cursor.execute(get_date)
+            date_data = self.cursor.fetchall()
+        except mysql.connector.Error as err:
+            if err.errno == errorcode.ER_NO_SUCH_TABLE:
+                print("This device has no backup in the database or is not declared in the device list")
+
+        for row in date_data:
+            raw_date = row[0]
+            # print(str(date))
+
+        for row in parsed_config_raw:
+            parsed_config = ("".join(row))
+        full_date = str(raw_date)
+        # Truncate full because of Windows file system that don't accept ":" in filename ...
+        date = full_date[0:10]
+        config = parsed_config.replace("²@", "'")
+        # Ask user if he want to show or save the config as a file
+        choice = input("Type SHOW for printing configuration to screen or SAVE to save it in the "
+                       "DOWNLOADED_CONFIGURATION folder as " + device_name + "-" + date + ".txt : ")
+
+        if choice and choice == "SHOW":
+            print(config)
+
+        elif choice and choice == "SAVE":
+            # create a file and writing the conf data in it
+            try:
+                config_file = open("DOWNLOADED_CONFIGURATION/" + device_name + "-" + date + ".txt", "w+")
+                config_file.write(config)
+                config_file.close()
+                print("File saved")
+            except:
+                print("An error happened when trying to create the file, please check permissions")
+        else:
+            print("Please type SHOW or SAVE")
 
     def __init__(self):
         print("Initialisation done, connected to database")
