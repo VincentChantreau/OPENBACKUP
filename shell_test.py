@@ -1,0 +1,80 @@
+from cmd import Cmd
+#import readline
+from interaction import interaction
+
+change_options =["name","ip"]
+command = interaction()
+# list_options=["switch","router","firewall"] # USE A DB CALL TO RETRIEVE VALUE IN DEVICE TYPE TABLE TO BE DYNAMIC
+list_options=command.allowed_type
+
+
+class Prompt(Cmd):
+    prompt = "OPENBACKUP>"
+
+    def do_list(self, arg):
+        command.list(arg)
+
+    def complete_list(self, text, state):
+        if not text:
+            completion = list_options.append("all")
+        else:
+            completion = [ f
+                            for f in list_options.append("all")
+                            if f.startswith(text)
+                            ]
+        return completion
+
+    def do_add_device(self, arg):
+        command.add_device_to_db()
+
+    def do_add_csv(self, arg):
+        command.add_device_csv_list()
+
+    def do_change(self,arg):
+
+        if arg and arg in change_options:
+
+            if arg == "name":
+                command.change_device_name()
+
+            if arg == "ip":
+                command.change_device_ip()
+
+
+    def complete_change(self, text, state):
+        if not text:
+            completion = change_options
+        else:
+            completion = [ f
+                            for f in change_options
+                            if f.startswith(text)
+                            ]
+        return completion
+
+
+    def do_exit(self,arg):
+        exit()
+
+    # HELP SECTION
+
+    def help_list(self):
+        print("This command allow you to list all devices that are registered in the Database")
+        print("You can use the parameters all, switch, router,firewall to be more or less precise")
+        # Should add a parameter to select device category like '--switch' or '--firewall'
+
+    def help_add_device(self):
+        print("This command allow you to add a new device to the Database, by setting his IP address and his name")
+
+    def help_change(self):
+        print("This command allow you to change the name or the IP address of a device in the Database")
+        print("Parameters are : ip / name ")
+
+    def help_add_csv(self):
+        print("This command allow you to add multiple device at the same time with a single csv file")
+        print("The CSV syntax must be the following one : ip_address,device_name,device_type,device_location(optional)")
+
+    do_EOF = do_exit
+    # Create a def for basic action like add, show, del etc, and the precise completion with another def. Can be cool
+
+
+Prompt().cmdloop()
