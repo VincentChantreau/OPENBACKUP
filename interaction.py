@@ -5,20 +5,15 @@ import mysql.connector as mariadb
 from mysqlx import errorcode
 
 
-class interaction:
-    mariadb_connection = mariadb.connect(user='root', password='azerty', database='OPENBACKUP', host="10.2.2.105")
-    cursor = mariadb_connection.cursor(buffered=True)
-    allowed_type = ["switch", "router", "firewall"]
 
-    # # SQL QUERY
-    # try:
-    #     get_device_type_list = "SELECT type FROM device_type"
-    #     cursor.execute(get_device_type_list)
-    #     mariadb_connection.commit()
-    # except mysql.connector.Error as err:
-    #     if err.errno == errorcode.ER_NO_SUCH_TABLE:
-    #         print("Table device_type not found")
-    # allowed_type = list(cursor.fetchall())
+class interaction():
+    def __init__(self, config_file):
+        config_data = config_file
+        self.mariadb_connection = mariadb.connect(**config_data)
+        print("Initialisation done, config file loaded, connected to database")
+        self.cursor = self.mariadb_connection.cursor(buffered=True)
+
+    allowed_type = ["switch", "router", "firewall"]
 
     # [1] Add Device
 
@@ -69,6 +64,8 @@ class interaction:
             ip = "".join(row)
         new_name = input("You can now enter the new name for the device at " + ip)
         set_name = "UPDATE device_list SET device_name = '{}' WHERE device_name = '{}'".format(new_name, old_name)
+        self.cursor.execute(set_name)
+        self.mariadb_connection.commit()
         print("Device name is now " + new_name + " at " + ip)
 
     # [4] List All Devices
@@ -141,8 +138,8 @@ class interaction:
             print("Please enter y or n")
 
     def call_back_conf(self):
-        # Calling back a configuration file and print it to the screen or save it to a file named "device_name-date.txt"
-        # in the folder DOWNLOADED_CONFIGURATION Reformating the conf file (single quote issue)
+        # Calling back the lastest configuration file and print it to the screen or save it to a file named "device_name-date.txt"
+        # in the folder DOWNLOADED_CONFIGURATION Reformatting the conf file (single quote issue)
         # SQL QUERY
         device_name = input("Please enter the device's name : ")
         parsed_config_raw = ""
@@ -189,13 +186,38 @@ class interaction:
                 config_file.write(config)
                 config_file.close()
                 print("File saved")
-            except:
+            except FileNotFoundError or PermissionError:
                 print("An error happened when trying to create the file, please check permissions")
         else:
             print("Please type SHOW or SAVE")
 
-    def __init__(self):
-        print("Initialisation done, connected to database")
+    def trigger_backup(self, state):
+        if state == "on" or state == "off":
+            try:
+                activate_scheduler_and_backup = "UPDATE `config` SET `backup_state` = '{}'".format(state)
+                self.cursor.execute(activate_scheduler_and_backup)
+                self.mariadb_connection.commit()
+                print("Backup service successfully set to " + state)
+            except mysql.connector.Error as err:
+                if err.errno == errorcode.ER_FK_COLUMN_CANNOT_CHANGE:
+                    print("Cannot change backup service's state")
+
+
+        else:
+            print("Please precise a state to set to the backup service (on or off)")
+
+    def set_backup_interval(self,interval):
+        if int(interval) > 1 :
+            try:
+                set_interval = "UPDATE `config` SET `backup_interval` = '{}'".format(interval)
+                self.cursor.execute(set_interval)
+                self.mariadb_connection.commit()
+                print("Backup interval successfully set to " + interval + " seconds")
+            except mysql.connector.Error as err:
+                if err.errno == errorcode.ER_FK_COLUMN_CANNOT_CHANGE:
+                    print("Cannot change backup service's state")
+        else:
+            print("Please set an interval value superior to 1 second")
 
     # Mercredi Import CSV, download config (de_pars) locally, push back config ( maybe just the difference ? with no in
     # front of new command ?)
